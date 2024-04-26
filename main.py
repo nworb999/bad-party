@@ -33,7 +33,7 @@ def main():
 
     client = udp_client.SimpleUDPClient(ip, port)
 
-    prompt = "Start off a conversation in a cringe, unsettling way but with an apathetic, uninterested tone."
+    prompt = "Start a conversation in a cringe way in one informal sentence.  No special characters."
 
     dialogue = get_utterance_from_llm(prompt)
 
