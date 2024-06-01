@@ -49,3 +49,4 @@ if __name__ == "__main__":
         local_port=local_port,
     )
     main()
+    stop_tunnel()
