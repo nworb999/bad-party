@@ -17,14 +17,25 @@ def do_auth():
 
   return r.json()['access_token']
 
-token = do_auth()
 
-headers = {
-  'Authorization': f'Bearer {token}'
-}
+def get_voice_uuid(name):
+    token = do_auth()
+    headers = {
+    'Authorization': f'Bearer {token}'
+    }
 
-r = requests.get('https://api.replicastudios.com/speech', params={
-  'txt': 'Please call Stella',  'speaker_id': 'c4fe46c4-79c0-403e-9318-ffe7bd4247dd', 'model_chain': 'classic'
-}, headers = headers)
+    # NATHAN !!!, the miscreant,
+    r = requests.get('https://api.replicastudios.com/v2/voices', headers = headers)
 
-print(r.json())
+    filtered_people = [person for person in r.json() if person['name'] == name]
+
+    return filtered_people[0]['uuid']
+
+voice_uuid = get_voice_uuid('Nathan')
+
+
+# r = requests.get('https://api.replicastudios.com/speech', params={
+#   'txt': 'Please call Stella',  'speaker_id': voice_uuid, 'model_chain': 'vox_1_0'
+# }, headers = headers)
+
+# print(r.json())
