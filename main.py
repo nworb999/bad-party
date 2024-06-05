@@ -36,8 +36,8 @@ def main():
     prompt = "Start a conversation in a cringe way in one informal sentence.  No special characters."
 
     dialogue = get_utterance_from_llm(prompt)
-
-    send_osc_message(client, "/dialogue", dialogue)
+    print(dialogue)
+    # send_osc_message(client, "/dialogue", dialogue)
 
 
 if __name__ == "__main__":

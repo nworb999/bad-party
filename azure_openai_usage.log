@@ -1,0 +1,10 @@
+Connected (version 2.0, client OpenSSH_8.9p1)
+Authentication (publickey) successful!
+Connected (version 2.0, client OpenSSH_8.9p1)
+Authentication (publickey) successful!
+Connected (version 2.0, client OpenSSH_8.9p1)
+Authentication (publickey) successful!
+HTTP Request: POST http://localhost:12345/chat/completions "HTTP/1.1 404 Not Found"
+Connected (version 2.0, client OpenSSH_8.9p1)
+Authentication (publickey) successful!
+HTTP Request: POST http://localhost:12345/chat/completions "HTTP/1.1 404 Not Found"

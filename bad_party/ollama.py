@@ -13,7 +13,7 @@ def get_response(prompt, past_responses=None):
     history.append({"role": "user", "content": prompt})
 
     data = {
-        "model": "llama2:70b",
+        "model": "llama3:70b",
         "messages": history,
         "stream": False,
     }
