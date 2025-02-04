@@ -26,6 +26,8 @@ public class SphereAIController : MonoBehaviour
     private float stateStartTime;
     private MovementState currentState;
 
+    private NetworkServer networkServer;
+
     private enum MovementState
     {
         Walking,
@@ -35,6 +37,8 @@ public class SphereAIController : MonoBehaviour
     private void Start()
     {
         movement = GetComponent<SphereMovement>();
+        networkServer = GetComponent<NetworkServer>();
+
         if (movement == null)
         {
             Debug.LogError("SphereMovement component not found!");
@@ -157,6 +161,15 @@ public class SphereAIController : MonoBehaviour
         if (newState == MovementState.Standing)
         {
             movement.StopMovement();
+        }
+
+            // Send state change event to Python server
+        if (networkServer != null)
+        {
+            networkServer.SendEvent("state_change", new { 
+                state = newState.ToString(),
+                position = transform.position
+            });
         }
     }
 }
