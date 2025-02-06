@@ -1,7 +1,24 @@
 using UnityEngine;
+using System;
 
 public class SphereMovement : MonoBehaviour
 {
+
+    [Serializable]
+    private class PositionUpdateData
+    {
+        public Vector3 position;
+        public Vector3 velocity;
+        public float speed;
+
+        public PositionUpdateData(Vector3 pos, Vector3 vel, float spd)
+        {
+            position = pos;
+            velocity = vel;
+            speed = spd;
+        }
+    }
+
     [Header("Movement Settings")]
     public float moveSpeed = 3f;          // Reduced from 5f for slower movement
     public float rotationSpeed = 1.5f;    // Reduced for smoother turning
@@ -15,10 +32,15 @@ public class SphereMovement : MonoBehaviour
     private Vector3 targetPosition;
     private float currentSpeed;
 
+    private NetworkServer networkServer;
+    private float positionUpdateInterval = 0.1f;  // Send position 10 times per second
+    private float lastUpdateTime = 0f;
+
     private void Start()
     {
         AdjustHeightToGround(transform.position);
         currentSpeed = 0f;
+        networkServer = FindObjectOfType<NetworkServer>();
     }
 
     private void Update()
@@ -31,6 +53,21 @@ public class SphereMovement : MonoBehaviour
         float targetSpeed = distanceToTarget > 1f ? moveSpeed : moveSpeed * (distanceToTarget / 1f);
         float dummy = 0f;
         currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed, ref dummy, smoothTime);
+
+            // Send position updates if moving
+        if (currentSpeed > 0.01f && Time.time - lastUpdateTime >= positionUpdateInterval)
+        {
+            if (networkServer != null)
+            {
+                var positionData = new PositionUpdateData(
+                    transform.position,
+                    currentVelocity,
+                    currentSpeed
+                );
+                networkServer.SendEvent("position_update", positionData);
+            }
+            lastUpdateTime = Time.time;
+        }
 
         // Apply smooth movement
         Vector3 newPosition = Vector3.SmoothDamp(
@@ -88,7 +125,7 @@ public class SphereMovement : MonoBehaviour
         
         for (int i = 0; i < maxAttempts; i++)
         {
-            float randomAngle = Random.Range(0f, 360f);
+            float randomAngle = UnityEngine.Random.Range(0f, 360f);
             float randomRadius = radius;
             
             Vector3 randomDirection = new Vector3(

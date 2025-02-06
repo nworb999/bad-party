@@ -1,9 +1,23 @@
 using UnityEngine;
+using System;
 using System.Collections;
 
 [RequireComponent(typeof(SphereMovement))]
 public class SphereAIController : MonoBehaviour
 {
+    [Serializable]
+    private class StateChangeData
+    {
+        public string state;
+        public Vector3 position;
+
+        public StateChangeData(string state, Vector3 position)
+        {
+            this.state = state;
+            this.position = position;
+        }
+    }
+
     [Header("Movement Settings")]
     public float moveRadius = 10f;         // Maximum distance to move
     public float waitTime = 2f;            // Time to wait between movements
@@ -37,7 +51,7 @@ public class SphereAIController : MonoBehaviour
     private void Start()
     {
         movement = GetComponent<SphereMovement>();
-        networkServer = GetComponent<NetworkServer>();
+        networkServer = FindObjectOfType<NetworkServer>();
 
         if (movement == null)
         {
@@ -56,6 +70,11 @@ public class SphereAIController : MonoBehaviour
         {
             Debug.LogWarning("No center object set, using this object's position");
             centerObject = gameObject;
+        }    
+        
+        if (networkServer == null)  
+        {
+            Debug.LogWarning("NetworkServer not found in scene!");
         }
 
         stateStartTime = Time.time;
@@ -121,9 +140,9 @@ public class SphereAIController : MonoBehaviour
         float waitStart = Time.time;
         while (Time.time - waitStart < waitTime)
         {
-            if (Random.value < 0.3f)
+            if (UnityEngine.Random.value < 0.3f)
             {
-                Vector3 randomLook = transform.position + Random.insideUnitSphere * 5f;
+                Vector3 randomLook = transform.position + UnityEngine.Random.insideUnitSphere * 5f;
                 randomLook.y = transform.position.y;
                 transform.LookAt(randomLook);
             }
@@ -142,12 +161,12 @@ public class SphereAIController : MonoBehaviour
         // Shorter waits between state changes
         if (currentState == MovementState.Walking)
         {
-            yield return new WaitForSeconds(Random.Range(minWalkTime, maxWalkTime));
+            yield return new WaitForSeconds(UnityEngine.Random.Range(minWalkTime, maxWalkTime));
             ChangeState(MovementState.Standing);
         }
         else
         {
-            yield return new WaitForSeconds(Random.Range(minStandTime, maxStandTime)); // Shorter standing time
+            yield return new WaitForSeconds(UnityEngine.Random.Range(minStandTime, maxStandTime)); // Shorter standing time
             ChangeState(MovementState.Walking);
         }
     }
@@ -166,10 +185,11 @@ public class SphereAIController : MonoBehaviour
             // Send state change event to Python server
         if (networkServer != null)
         {
-            networkServer.SendEvent("state_change", new { 
-                state = newState.ToString(),
-                position = transform.position
-            });
+            var stateEvent = new StateChangeData(
+                newState.ToString(),
+                transform.position
+            );
+            networkServer.SendEvent("state_change", stateEvent);
         }
     }
 }
