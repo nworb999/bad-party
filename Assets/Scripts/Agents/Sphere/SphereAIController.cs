@@ -1,6 +1,6 @@
-using UnityEngine;
 using System;
 using System.Collections;
+using UnityEngine;
 
 [RequireComponent(typeof(SphereMovement))]
 public class SphereAIController : MonoBehaviour
@@ -18,22 +18,40 @@ public class SphereAIController : MonoBehaviour
         }
     }
 
+    [Serializable]
+    private class DestinationEventData
+    {
+        public string state;
+        public Vector3 position;
+        public string targetName;
+
+        public DestinationEventData(string state, Vector3 position, string targetName)
+        {
+            this.state = state;
+            this.position = position;
+            this.targetName = targetName;
+        }
+    }
+
+    [Header("Agent Settings")]
+    public string agentId = "sphere_1";
+
     [Header("Movement Settings")]
-    public float moveRadius = 10f;         // Maximum distance to move
-    public float waitTime = 2f;            // Time to wait between movements
-    public GameObject centerObject;         // Center object for movement radius
-    public GameObject[] locationObjects;    // Array of GameObjects to move between
+    public float moveRadius = 10f; // Maximum distance to move
+    public float waitTime = 2f; // Time to wait between movements
+    public GameObject centerObject; // Center object for movement radius
+    public GameObject[] locationObjects; // Array of GameObjects to move between
 
     [Header("Collision Settings")]
-    public LayerMask obstacleLayer;           // Layer mask for obstacles
-    public float bufferDistance = 0.5f;   
+    public LayerMask obstacleLayer; // Layer mask for obstacles
+    public float bufferDistance = 0.5f;
 
     private float minWalkTime = 3f;
     private float maxWalkTime = 5f;
     private float minStandTime = 0.5f;
     private float maxStandTime = 1.5f;
     private float lookAroundWaitTime = 0.5f;
-    public int currentPointIndex = 0;     // Index of current location point
+    public int currentPointIndex = 0; // Index of current location point
     private bool isWaiting = false;
 
     private SphereMovement movement;
@@ -45,7 +63,7 @@ public class SphereAIController : MonoBehaviour
     private enum MovementState
     {
         Walking,
-        Standing
+        Standing,
     }
 
     private void Start()
@@ -70,9 +88,9 @@ public class SphereAIController : MonoBehaviour
         {
             Debug.LogWarning("No center object set, using this object's position");
             centerObject = gameObject;
-        }    
-        
-        if (networkServer == null)  
+        }
+
+        if (networkServer == null)
         {
             Debug.LogWarning("NetworkServer not found in scene!");
         }
@@ -89,8 +107,12 @@ public class SphereAIController : MonoBehaviour
         {
             switch (currentState)
             {
-                case MovementState.Walking: HandleWalking(); break;
-                case MovementState.Standing: HandleStanding(); break;
+                case MovementState.Walking:
+                    HandleWalking();
+                    break;
+                case MovementState.Standing:
+                    HandleStanding();
+                    break;
             }
         }
     }
@@ -107,18 +129,20 @@ public class SphereAIController : MonoBehaviour
         }
     }
 
-    private void HandleStanding() 
+    private void HandleStanding()
     {
         // Just wait until the movement loop changes state
     }
 
     private void SetNewDestination()
     {
+        string targetName;
         if (locationObjects.Length > 1)
         {
             // Move to next point in sequence
             currentPointIndex = (currentPointIndex + 1) % locationObjects.Length;
             movement.MoveToObject(locationObjects[currentPointIndex]);
+            targetName = locationObjects[currentPointIndex].name;
         }
         else
         {
@@ -127,7 +151,22 @@ public class SphereAIController : MonoBehaviour
             {
                 // If no valid position found, stay in place
                 movement.SetTargetPosition(transform.position);
+                targetName = "None";
             }
+            else
+            {
+                targetName = "RandomPoint";
+            }
+        }
+
+        if (networkServer != null)
+        {
+            var destinationEvent = new DestinationEventData(
+                "new_destination",
+                movement.GetTargetPosition(),
+                targetName
+            );
+            networkServer.SendEvent("destination_change", agentId, destinationEvent); 
         }
     }
 
@@ -135,7 +174,7 @@ public class SphereAIController : MonoBehaviour
     {
         isWaiting = true;
         ChangeState(MovementState.Standing);
-        
+
         // Look around occasionally while waiting
         float waitStart = Time.time;
         while (Time.time - waitStart < waitTime)
@@ -156,40 +195,39 @@ public class SphereAIController : MonoBehaviour
 
     private IEnumerator MovementLoop()
     {
-    while (true)
-    {
-        // Shorter waits between state changes
-        if (currentState == MovementState.Walking)
+        while (true)
         {
-            yield return new WaitForSeconds(UnityEngine.Random.Range(minWalkTime, maxWalkTime));
-            ChangeState(MovementState.Standing);
+            // Shorter waits between state changes
+            if (currentState == MovementState.Walking)
+            {
+                yield return new WaitForSeconds(UnityEngine.Random.Range(minWalkTime, maxWalkTime));
+                ChangeState(MovementState.Standing);
+            }
+            else
+            {
+                yield return new WaitForSeconds(
+                    UnityEngine.Random.Range(minStandTime, maxStandTime)
+                ); // Shorter standing time
+                ChangeState(MovementState.Walking);
+            }
         }
-        else
-        {
-            yield return new WaitForSeconds(UnityEngine.Random.Range(minStandTime, maxStandTime)); // Shorter standing time
-            ChangeState(MovementState.Walking);
-        }
-    }
     }
 
     private void ChangeState(MovementState newState)
     {
         currentState = newState;
         stateStartTime = Time.time;
-        
+
         if (newState == MovementState.Standing)
         {
             movement.StopMovement();
         }
 
-            // Send state change event to Python server
+        // Send state change event to Python server
         if (networkServer != null)
         {
-            var stateEvent = new StateChangeData(
-                newState.ToString(),
-                transform.position
-            );
-            networkServer.SendEvent("state_change", stateEvent);
+            var stateEvent = new StateChangeData(newState.ToString(), transform.position);
+            networkServer.SendEvent("state_change", agentId, stateEvent);  
         }
     }
 }

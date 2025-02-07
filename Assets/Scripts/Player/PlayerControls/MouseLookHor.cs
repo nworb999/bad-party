@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-
-
 public class MouseLookHor : MonoBehaviour
 {
     private Camera _camera;
@@ -13,11 +11,9 @@ public class MouseLookHor : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-
         _camera = GetComponent<Camera>();
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-
     }
 
     // Update is called once per frame

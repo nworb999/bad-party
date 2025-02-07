@@ -4,7 +4,7 @@ public class PlayerMovementListener : MonoBehaviour
 {
     // Reference to the player's components
     private Transform playerTransform;
-    private Rigidbody playerRigidbody;    // Use Rigidbody2D for 2D games
+    private Rigidbody playerRigidbody; // Use Rigidbody2D for 2D games
     private Vector3 lastPosition;
 
     void Start()
@@ -18,9 +18,7 @@ public class PlayerMovementListener : MonoBehaviour
     void Update()
     {
         // Method 1: Listen to Input directly
-        if (Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0)
-        {
-        }
+        if (Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0) { }
 
         // Method 2: Check position change
         if (Vector3.Distance(lastPosition, playerTransform.position) > 0.01f)

@@ -1,9 +1,8 @@
-using UnityEngine;
 using System;
+using UnityEngine;
 
 public class SphereMovement : MonoBehaviour
 {
-
     [Serializable]
     private class PositionUpdateData
     {
@@ -19,21 +18,23 @@ public class SphereMovement : MonoBehaviour
         }
     }
 
+    private SphereAIController aiController;
+
     [Header("Movement Settings")]
-    public float moveSpeed = 3f;          // Reduced from 5f for slower movement
-    public float rotationSpeed = 1.5f;    // Reduced for smoother turning
-    public float smoothTime = 0.8f;       // Increased for smoother acceleration/deceleration
-    public float heightAboveGround = 1f;  
+    public float moveSpeed = 3f; // Reduced from 5f for slower movement
+    public float rotationSpeed = 1.5f; // Reduced for smoother turning
+    public float smoothTime = 0.8f; // Increased for smoother acceleration/deceleration
+    public float heightAboveGround = 1f;
     public LayerMask groundLayer;
-    public float bufferDistance = 0.5f;   // Moved from AIController
-    public LayerMask obstacleLayer;       // Moved from AIController
-    
+    public float bufferDistance = 0.5f; // Moved from AIController
+    public LayerMask obstacleLayer; // Moved from AIController
+
     private Vector3 currentVelocity;
     private Vector3 targetPosition;
     private float currentSpeed;
 
     private NetworkServer networkServer;
-    private float positionUpdateInterval = 0.1f;  // Send position 10 times per second
+    private float positionUpdateInterval = 0.1f; // Send position 10 times per second
     private float lastUpdateTime = 0f;
 
     private void Start()
@@ -41,6 +42,7 @@ public class SphereMovement : MonoBehaviour
         AdjustHeightToGround(transform.position);
         currentSpeed = 0f;
         networkServer = FindObjectOfType<NetworkServer>();
+        aiController = GetComponent<SphereAIController>();
     }
 
     private void Update()
@@ -54,7 +56,7 @@ public class SphereMovement : MonoBehaviour
         float dummy = 0f;
         currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed, ref dummy, smoothTime);
 
-            // Send position updates if moving
+        // Send position updates if moving
         if (currentSpeed > 0.01f && Time.time - lastUpdateTime >= positionUpdateInterval)
         {
             if (networkServer != null)
@@ -64,7 +66,7 @@ public class SphereMovement : MonoBehaviour
                     currentVelocity,
                     currentSpeed
                 );
-                networkServer.SendEvent("position_update", positionData);
+                networkServer.SendEvent("position_update", aiController.agentId, positionData);
             }
             lastUpdateTime = Time.time;
         }
@@ -84,17 +86,24 @@ public class SphereMovement : MonoBehaviour
         if (moveDirection.magnitude > 0.1f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation,
+                targetRotation,
+                rotationSpeed * Time.deltaTime
+            );
         }
     }
 
     public void MoveToObject(GameObject targetObject)
     {
-        if (targetObject == null) return;
+        if (targetObject == null)
+            return;
 
         // Get direction from current position to target
-        Vector3 directionToTarget = (targetObject.transform.position - transform.position).normalized;
-        
+        Vector3 directionToTarget = (
+            targetObject.transform.position - transform.position
+        ).normalized;
+
         // Calculate combined radius
         float targetRadius = 0f;
         if (targetObject.TryGetComponent<Collider>(out Collider targetCollider))
@@ -108,35 +117,39 @@ public class SphereMovement : MonoBehaviour
                 targetRadius = targetCollider.bounds.extents.magnitude;
             }
         }
-        
+
         // Calculate safe distance
         float sphereRadius = GetComponent<SphereCollider>().radius * transform.lossyScale.x;
         float safeDistance = sphereRadius + targetRadius + bufferDistance;
-        
+
         // Set target point
         Vector3 targetPoint = targetObject.transform.position - (directionToTarget * safeDistance);
         SetTargetPosition(targetPoint);
     }
 
-    public bool TryMoveToRandomPoint(Vector3 centerPoint, float radius, GameObject[] avoidObjects = null)
+    public bool TryMoveToRandomPoint(
+        Vector3 centerPoint,
+        float radius,
+        GameObject[] avoidObjects = null
+    )
     {
         int maxAttempts = 10;
         float sphereRadius = GetComponent<SphereCollider>().radius * transform.lossyScale.x;
-        
+
         for (int i = 0; i < maxAttempts; i++)
         {
             float randomAngle = UnityEngine.Random.Range(0f, 360f);
             float randomRadius = radius;
-            
+
             Vector3 randomDirection = new Vector3(
                 Mathf.Cos(randomAngle),
                 0f,
                 Mathf.Sin(randomAngle)
             ).normalized;
-            
+
             Vector3 potentialTarget = centerPoint + (randomDirection * randomRadius);
             bool isValidPosition = true;
-            
+
             // Check against avoid objects
             if (avoidObjects != null)
             {
@@ -144,7 +157,8 @@ public class SphereMovement : MonoBehaviour
                 {
                     if (obj != null && obj.TryGetComponent<Collider>(out Collider objCollider))
                     {
-                        float minDistance = sphereRadius + objCollider.bounds.extents.magnitude + bufferDistance;
+                        float minDistance =
+                            sphereRadius + objCollider.bounds.extents.magnitude + bufferDistance;
                         if (Vector3.Distance(potentialTarget, obj.transform.position) < minDistance)
                         {
                             isValidPosition = false;
@@ -153,10 +167,19 @@ public class SphereMovement : MonoBehaviour
                     }
                 }
             }
-            
+
             // Check against obstacles
-            if (isValidPosition && Physics.SphereCast(centerPoint, sphereRadius,
-                randomDirection, out RaycastHit hit, randomRadius, obstacleLayer))
+            if (
+                isValidPosition
+                && Physics.SphereCast(
+                    centerPoint,
+                    sphereRadius,
+                    randomDirection,
+                    out RaycastHit hit,
+                    randomRadius,
+                    obstacleLayer
+                )
+            )
             {
                 randomRadius = hit.distance - bufferDistance;
                 if (randomRadius <= 0)
@@ -168,14 +191,14 @@ public class SphereMovement : MonoBehaviour
                     potentialTarget = centerPoint + (randomDirection * randomRadius);
                 }
             }
-            
+
             if (isValidPosition)
             {
                 SetTargetPosition(potentialTarget);
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -202,8 +225,10 @@ public class SphereMovement : MonoBehaviour
     public bool HasReachedTarget(float threshold = 0.1f)
     {
         Vector3 adjustedTarget = AdjustHeightToGround(targetPosition);
-        return Vector3.Distance(new Vector3(transform.position.x, 0, transform.position.z), 
-                              new Vector3(adjustedTarget.x, 0, adjustedTarget.z)) < threshold;
+        return Vector3.Distance(
+                new Vector3(transform.position.x, 0, transform.position.z),
+                new Vector3(adjustedTarget.x, 0, adjustedTarget.z)
+            ) < threshold;
     }
 
     public void StopMovement()

@@ -1,12 +1,10 @@
-using UnityEngine;
+using System;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Collections.Concurrent;
-using System;
-
-
+using UnityEngine;
 
 public class NetworkServer : MonoBehaviour
 {
@@ -14,14 +12,17 @@ public class NetworkServer : MonoBehaviour
     private class EventWrapper
     {
         public string type;
+        public string agent_id;
         public string data;
     }
 
     [Header("Network Settings")]
-    public int tcpPort = 8052;        // Port for TCP (requests)
-    public int udpPort = 8053;        // Port for UDP (events)
+    public int tcpPort = 8052; // Port for TCP (requests)
+    public int udpPort = 8053; // Port for UDP (events)
     public string pythonServerIP = "172.29.61.180";
-    public int pythonServerPort = 8001;  // UDP port where Python server listens
+    public int pythonServerPort = 8001; // UDP port where Python server listens
+    private UdpClient udpReceiver;
+    private Thread udpReceiverThread;
 
     private TcpListener tcpListener;
     private UdpClient udpClient;
@@ -37,15 +38,15 @@ public class NetworkServer : MonoBehaviour
     }
 
     private void StartServers()
-    {        
+    {
         if (isRunning)
         {
             return;
         }
-        
+
         isRunning = true;
         Debug.Log("Starting TCP and UDP servers...");
-        
+
         try
         {
             tcpListenerThread = new Thread(new ThreadStart(TCPListenerThread));
@@ -56,11 +57,48 @@ public class NetworkServer : MonoBehaviour
             udpSenderThread = new Thread(new ThreadStart(UDPSenderThread));
             udpSenderThread.IsBackground = true;
             udpSenderThread.Start();
+
+            udpReceiver = new UdpClient(udpPort);
+            udpReceiverThread = new Thread(new ThreadStart(UDPReceiverThread));
+            udpReceiverThread.IsBackground = true;
+            udpReceiverThread.Start();
         }
         catch (Exception e)
         {
             Debug.LogError($"Error starting servers: {e.Message}\nStackTrace: {e.StackTrace}");
             StopServers();
+        }
+    }
+
+
+    private void UDPReceiverThread()
+    {
+        IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+        
+        while (isRunning)
+        {
+            try
+            {
+                byte[] data = udpReceiver.Receive(ref remoteEndPoint);
+                string message = Encoding.UTF8.GetString(data);
+                Debug.Log($"[UDP] Received: {message}");
+
+                // Parse the agent update
+                EventWrapper update = JsonUtility.FromJson<EventWrapper>(message);
+                
+                if (update.type == "agent_update")
+                {
+                    Debug.Log($"Agent {update.agent_id} update: {update.data}");
+                    // Handle the agent update here - update UI, agent state, etc.
+                }
+            }
+            catch (Exception e)
+            {
+                if (isRunning)
+                {
+                    Debug.LogError($"UDP Receive error: {e.Message}\nStackTrace: {e.StackTrace}");
+                }
+            }
         }
     }
 
@@ -83,7 +121,7 @@ public class NetworkServer : MonoBehaviour
                     Debug.Log("Waiting for TCP client connection...");
                     TcpClient client = tcpListener.AcceptTcpClient();
                     Debug.Log($"TCP Client connected from {client.Client.RemoteEndPoint}");
-                    
+
                     Thread clientThread = new Thread(new ParameterizedThreadStart(HandleTCPClient));
                     clientThread.IsBackground = true;
                     clientThread.Start(client);
@@ -98,7 +136,9 @@ public class NetworkServer : MonoBehaviour
                 {
                     if (isRunning)
                     {
-                        Debug.LogError($"TCP Server error: {e.Message}\nStackTrace: {e.StackTrace}");
+                        Debug.LogError(
+                            $"TCP Server error: {e.Message}\nStackTrace: {e.StackTrace}"
+                        );
                     }
                 }
             }
@@ -127,13 +167,13 @@ public class NetworkServer : MonoBehaviour
                 byte[] buffer = new byte[1024];
                 int bytesRead = stream.Read(buffer, 0, buffer.Length);
                 string request = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                
+
                 Debug.Log($"[TCP] Received request: {request}");
 
                 string response = HandleRequest(request);
 
                 Debug.Log($"[TCP] Sending response: {response}");
-                
+
                 byte[] responseData = Encoding.UTF8.GetBytes(response);
                 stream.Write(responseData, 0, responseData.Length);
             }
@@ -182,7 +222,9 @@ public class NetworkServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogWarning($"Error stopping TCP listener: {e.Message}\nStackTrace: {e.StackTrace}");
+                    Debug.LogWarning(
+                        $"Error stopping TCP listener: {e.Message}\nStackTrace: {e.StackTrace}"
+                    );
                 }
                 tcpListener = null;
             }
@@ -192,7 +234,7 @@ public class NetworkServer : MonoBehaviour
     private void StopServers()
     {
         isRunning = false;
-        
+
         StopTCPListener();
 
         if (udpClient != null)
@@ -204,9 +246,25 @@ public class NetworkServer : MonoBehaviour
             }
             catch (Exception e)
             {
-                Debug.LogWarning($"Error closing UDP client: {e.Message}\nStackTrace: {e.StackTrace}");
+                Debug.LogWarning(
+                    $"Error closing UDP client: {e.Message}\nStackTrace: {e.StackTrace}"
+                );
             }
             udpClient = null;
+        }
+
+        if (udpReceiver != null)
+        {
+            try
+            {
+                udpReceiver.Close();
+                Debug.Log("UDP receiver closed successfully");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Error closing UDP receiver: {e.Message}\nStackTrace: {e.StackTrace}");
+            }
+            udpReceiver = null;
         }
         Debug.Log("All servers stopped");
     }
@@ -221,7 +279,14 @@ public class NetworkServer : MonoBehaviour
             {
                 case "get_position":
                     Vector3 pos = transform.position;
-                    response = JsonUtility.ToJson(new { x = pos.x, y = pos.y, z = pos.z });
+                    response = JsonUtility.ToJson(
+                        new
+                        {
+                            x = pos.x,
+                            y = pos.y,
+                            z = pos.z,
+                        }
+                    );
                     Debug.Log($"Handling get_position request, response: {response}");
                     return response;
                 case "get_state":
@@ -242,7 +307,7 @@ public class NetworkServer : MonoBehaviour
         }
     }
 
-    public void SendEvent(string eventType, object eventData)
+    public void SendEvent(string eventType, string agentId, object eventData)
     {
         if (!isRunning)
         {
@@ -251,14 +316,15 @@ public class NetworkServer : MonoBehaviour
         }
 
         // If it's a position update, convert to proper serializable format
-        if (eventType == "position_update" || eventType == "state_change")
+        if (eventType == "position_update" || eventType == "state_change" || eventType == "destination_change")
         {
             var wrapper = new EventWrapper
             {
                 type = eventType,
-                data = JsonUtility.ToJson(eventData)
+                agent_id = agentId,
+                data = JsonUtility.ToJson(eventData),
             };
-            
+
             string jsonEvent = JsonUtility.ToJson(wrapper);
             eventQueue.Enqueue(jsonEvent);
             // Debug.Log($"Event queued: {jsonEvent}");
