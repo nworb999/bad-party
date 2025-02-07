@@ -8,6 +8,23 @@ using UnityEngine;
 
 public class NetworkServer : MonoBehaviour
 {
+    // TODO -remove 
+    [Serializable]
+    private class StateData
+    {
+        public string state;
+    }
+
+    [Serializable]
+    private class AgentUpdate
+    {
+        public string objective;
+        public string thought;
+        public string emotion;
+        public string current_action;
+        public string current_animation;
+    }
+
     [Serializable]
     private class EventWrapper
     {
@@ -49,19 +66,32 @@ public class NetworkServer : MonoBehaviour
 
         try
         {
+            // TCP Setup
             tcpListenerThread = new Thread(new ThreadStart(TCPListenerThread));
             tcpListenerThread.IsBackground = true;
             tcpListenerThread.Start();
 
+            // UDP Sender Setup
+            Debug.Log($"Initializing UDP sender to Python server at {pythonServerIP}:{pythonServerPort}");
             udpClient = new UdpClient();
             udpSenderThread = new Thread(new ThreadStart(UDPSenderThread));
             udpSenderThread.IsBackground = true;
             udpSenderThread.Start();
 
-            udpReceiver = new UdpClient(udpPort);
-            udpReceiverThread = new Thread(new ThreadStart(UDPReceiverThread));
-            udpReceiverThread.IsBackground = true;
-            udpReceiverThread.Start();
+            // UDP Receiver Setup
+            Debug.Log($"Initializing UDP receiver on port {udpPort}");
+            try {
+                udpReceiver = new UdpClient(udpPort);
+                Debug.Log($"UDP receiver successfully bound to port {udpPort}");
+                udpReceiverThread = new Thread(new ThreadStart(UDPReceiverThread));
+                udpReceiverThread.IsBackground = true;
+                udpReceiverThread.Start();
+                Debug.Log("UDP receiver thread started");
+            }
+            catch (SocketException se) {
+                Debug.LogError($"Failed to bind UDP receiver to port {udpPort}: {se.Message}");
+                throw;
+            }
         }
         catch (Exception e)
         {
@@ -70,37 +100,111 @@ public class NetworkServer : MonoBehaviour
         }
     }
 
-
     private void UDPReceiverThread()
     {
+        Debug.Log("[UDP] Receiver thread starting...");
         IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
         
-        while (isRunning)
+        try 
         {
-            try
+            Debug.Log("[UDP] Starting receive loop...");
+            while (isRunning)
             {
-                byte[] data = udpReceiver.Receive(ref remoteEndPoint);
-                string message = Encoding.UTF8.GetString(data);
-                Debug.Log($"[UDP] Received: {message}");
+                try
+                {
+                    Debug.Log("[UDP] Waiting for next message...");
+                    byte[] data = udpReceiver.Receive(ref remoteEndPoint);
+                    Debug.Log($"[UDP] Received {data.Length} bytes from {remoteEndPoint}");
+                    
+                    string message = Encoding.UTF8.GetString(data);
+                    Debug.Log($"[UDP] Raw message: {message}");
 
-                // Parse the agent update
-                EventWrapper update = JsonUtility.FromJson<EventWrapper>(message);
-                
-                if (update.type == "agent_update")
-                {
-                    Debug.Log($"Agent {update.agent_id} update: {update.data}");
-                    // Handle the agent update here - update UI, agent state, etc.
+                    try {
+                        EventWrapper wrapper = JsonUtility.FromJson<EventWrapper>(message);
+                        Debug.Log($"[UDP] Event type: {wrapper.type}, Agent: {wrapper.agent_id}");
+                        
+                        if (wrapper.type == "agent_update")
+                        {
+                            AgentUpdate update = JsonUtility.FromJson<AgentUpdate>(wrapper.data);
+                            Debug.Log($"[UDP] Agent {wrapper.agent_id} update processed successfully");
+                        }
+                    }
+                    catch (Exception parseEx)
+                    {
+                        Debug.LogError($"[UDP] JSON parsing error: {parseEx.Message}\nRaw message was: {message}");
+                    }
                 }
-            }
-            catch (Exception e)
-            {
-                if (isRunning)
+                catch (SocketException se)
                 {
-                    Debug.LogError($"UDP Receive error: {e.Message}\nStackTrace: {e.StackTrace}");
+                    Debug.LogError($"[UDP] Socket error in receive loop: {se.Message} (ErrorCode: {se.SocketErrorCode})");
+                    if (!isRunning) break;
+                    Thread.Sleep(1000); // Wait a bit before retrying
+                }
+                catch (Exception e)
+                {
+                    if (isRunning)
+                    {
+                        Debug.LogError($"[UDP] Receive loop error: {e.GetType().Name}: {e.Message}\n{e.StackTrace}");
+                        Thread.Sleep(1000); // Wait a bit before retrying
+                    }
                 }
             }
         }
+        catch (Exception e)
+        {
+            Debug.LogError($"[UDP] Fatal error in receiver thread: {e.GetType().Name}: {e.Message}\n{e.StackTrace}");
+        }
+        finally 
+        {
+            Debug.Log("[UDP] Receiver thread ending");
+        }
     }
+
+
+    // private void UDPReceiverThread()
+    // {
+    //     IPEndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+        
+    //     while (isRunning)
+    //     {
+    //         try
+    //         {
+    //             byte[] data = udpReceiver.Receive(ref remoteEndPoint);
+    //             string message = Encoding.UTF8.GetString(data);
+    //             Debug.Log($"[UDP] Received raw message: {message}"); // Added raw message logging
+
+    //             try {
+    //                 // Parse the agent update
+    //                 EventWrapper wrapper = JsonUtility.FromJson<EventWrapper>(message);
+    //                 Debug.Log($"[UDP] Parsed event type: {wrapper.type}, agent: {wrapper.agent_id}"); // Added parsing debug
+                    
+    //                 if (wrapper.type == "agent_update")
+    //                 {
+    //                     AgentUpdate update = JsonUtility.FromJson<AgentUpdate>(wrapper.data);
+    //                     Debug.Log($"Agent {wrapper.agent_id} update:");
+    //                     Debug.Log($"  Objective: {update.objective}");
+    //                     Debug.Log($"  Thought: {update.thought}");
+    //                     Debug.Log($"  Emotion: {update.emotion}");
+    //                     Debug.Log($"  Action: {update.current_action}");
+    //                     Debug.Log($"  Animation: {update.current_animation}");
+                        
+    //                     // Handle the agent update here - update UI, agent state, etc.
+    //                 }
+    //             }
+    //             catch (Exception parseEx)
+    //             {
+    //                 Debug.LogError($"Error parsing UDP message: {parseEx.Message}\nMessage was: {message}");
+    //             }
+    //         }
+    //         catch (Exception e)
+    //         {
+    //             if (isRunning)
+    //             {
+    //                 Debug.LogError($"UDP Receive error: {e.Message}\nStackTrace: {e.StackTrace}");
+    //             }
+    //         }
+    //     }
+    // }
 
     private void TCPListenerThread()
     {
@@ -328,6 +432,33 @@ public class NetworkServer : MonoBehaviour
             string jsonEvent = JsonUtility.ToJson(wrapper);
             eventQueue.Enqueue(jsonEvent);
             // Debug.Log($"Event queued: {jsonEvent}");
+
+            if (eventType == "state_change")
+            {
+                var stateData = JsonUtility.FromJson<StateData>(JsonUtility.ToJson(eventData));
+                string unityState = stateData.state.ToLower();
+                
+                // Create mock agent update based on state
+                var agentUpdate = new AgentUpdate
+                {
+                    objective = unityState == "walking" ? "Moving to new location" : "Taking a moment",
+                    thought = unityState == "walking" ? "Making my way through the space" : "Just another moment in the day",
+                    emotion = unityState == "walking" ? "active" : "idle",
+                    current_action = unityState,
+                    current_animation = unityState
+                };
+
+                var updateWrapper = new EventWrapper
+                {
+                    type = "agent_update",
+                    agent_id = agentId,
+                    data = JsonUtility.ToJson(agentUpdate)
+                };
+
+                string updateEvent = JsonUtility.ToJson(updateWrapper);
+                eventQueue.Enqueue(updateEvent);
+                Debug.Log($"{(unityState == "walking" ? "Making my way through the space" : "Just another moment in the day")}");
+            }
         }
         else
         {
