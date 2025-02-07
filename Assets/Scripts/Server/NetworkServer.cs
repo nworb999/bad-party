@@ -152,10 +152,10 @@ public class NetworkServer : MonoBehaviour
             {
                 try
                 {
-                    Debug.Log($"[UDP] Sending event: {eventData}");
+                    // Debug.Log($"[UDP] Sending event: {eventData}");
                     byte[] data = Encoding.UTF8.GetBytes(eventData);
                     udpClient.Send(data, data.Length, pythonServerIP, pythonServerPort);
-                    Debug.Log($"[UDP] Successfully sent {data.Length} bytes");
+                    // Debug.Log($"[UDP] Successfully sent {data.Length} bytes");
                 }
                 catch (Exception e)
                 {
@@ -261,7 +261,7 @@ public class NetworkServer : MonoBehaviour
             
             string jsonEvent = JsonUtility.ToJson(wrapper);
             eventQueue.Enqueue(jsonEvent);
-            Debug.Log($"Event queued: {jsonEvent}");
+            // Debug.Log($"Event queued: {jsonEvent}");
         }
         else
         {
