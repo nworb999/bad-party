@@ -41,7 +41,7 @@ public class SphereMovement : MonoBehaviour
     {
         AdjustHeightToGround(transform.position);
         currentSpeed = 0f;
-        networkServer = FindObjectOfType<NetworkServer>();
+        networkServer = GameObject.FindObjectOfType<NetworkServer>();
         aiController = GetComponent<SphereAIController>();
     }
 
@@ -61,12 +61,12 @@ public class SphereMovement : MonoBehaviour
         {
             if (networkServer != null)
             {
-                var positionData = new PositionUpdateData(
+                string message = JsonUtility.ToJson(new PositionUpdateData(
                     transform.position,
                     currentVelocity,
                     currentSpeed
-                );
-                networkServer.SendEvent("position_update", aiController.agentId, positionData);
+                ));
+                networkServer.SendUpdate($"position_update|{aiController.agentId}|{message}");
             }
             lastUpdateTime = Time.time;
         }

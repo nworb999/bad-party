@@ -69,7 +69,7 @@ public class SphereAIController : MonoBehaviour
     private void Start()
     {
         movement = GetComponent<SphereMovement>();
-        networkServer = FindObjectOfType<NetworkServer>();
+        networkServer = GameObject.FindObjectOfType<NetworkServer>();
 
         if (movement == null)
         {
@@ -166,7 +166,8 @@ public class SphereAIController : MonoBehaviour
                 movement.GetTargetPosition(),
                 targetName
             );
-            networkServer.SendEvent("destination_change", agentId, destinationEvent); 
+            string message = JsonUtility.ToJson(destinationEvent);
+            networkServer.SendUpdate($"destination_change|{agentId}|{message}");
         }
     }
 
@@ -227,7 +228,8 @@ public class SphereAIController : MonoBehaviour
         if (networkServer != null)
         {
             var stateEvent = new StateChangeData(newState.ToString(), transform.position);
-            networkServer.SendEvent("state_change", agentId, stateEvent);  
+            string message = JsonUtility.ToJson(stateEvent);
+            networkServer.SendUpdate($"state_change|{agentId}|{message}");
         }
     }
 }

@@ -31,12 +31,10 @@ public class ObjectLogger : MonoBehaviour
 
     void HandleLog(string logString, string stackTrace, LogType type)
     {
-        string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff");
-        string logLevel = type.ToString().ToUpper().PadRight(7);
 
-        myLogQueue.Enqueue($"[{timestamp}] [{logLevel}] {logString}");
+        myLogQueue.Enqueue($"{logString}");
         if (type == LogType.Exception)
-            myLogQueue.Enqueue($"[{timestamp}] [TRACE  ] {stackTrace}");
+            myLogQueue.Enqueue($"[{stackTrace}");
 
         while (myLogQueue.Count > qsize)
             myLogQueue.Dequeue();
