@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using UnityEngine;
+using Cinemachine;
 
 public class NetworkServer : MonoBehaviour 
 {
@@ -17,6 +18,14 @@ public class NetworkServer : MonoBehaviour
     private Thread listenerThread;
     private bool isRunning = true;
     private bool needsSetupData = false;
+
+    [Serializable]  // Add this at the class level
+    private class SetupData
+    {
+        public List<string> agent_ids;
+        public List<string> locations;
+        public List<string> cameras;
+    }
 
     private void Start()
     {
@@ -149,35 +158,27 @@ public class NetworkServer : MonoBehaviour
         {
             // Safe to call FindObjectsOfType here since we're on the main thread
             SphereAIController[] agents = FindObjectsOfType<SphereAIController>();
+            CinemachineVirtualCamera[] cameras = FindObjectsOfType<CinemachineVirtualCamera>();
 
-            // Extract agent IDs
-            List<string> agentIds = agents.Select(agent => agent.agentId).ToList();
-
-            // Extract unique location names from all agents
-            HashSet<string> locationNames = new HashSet<string>();
-            foreach (var agent in agents)
+            // Create a new instance of our serializable class
+            SetupData setupData = new SetupData
             {
-                if (agent.locationObjects != null)
-                {
-                    foreach (var location in agent.locationObjects)
-                    {
-                        if (location != null)
-                        {
-                            locationNames.Add(location.name);
-                        }
-                    }
-                }
-            }
-
-            // Create the setup data object
-            var setupData = new
-            {
-                agent_ids = agentIds,
-                locations = locationNames.ToList()
+                agent_ids = agents.Select(agent => agent.agentId).ToList(),
+                locations = agents
+                    .SelectMany(agent => agent.locationObjects ?? new GameObject[0])
+                    .Where(loc => loc != null)
+                    .Select(loc => loc.name)
+                    .Distinct()
+                    .ToList(),
+                cameras = cameras
+                    .Where(cam => cam != null)
+                    .Select(cam => cam.Name)
+                    .ToList()
             };
 
             // Convert setup data to JSON
             string setupJson = JsonUtility.ToJson(setupData);
+            Debug.Log($"Setup data: {setupJson}");
 
             // Create the setup message
             string setupMessage = $"setup|server|{setupJson}";

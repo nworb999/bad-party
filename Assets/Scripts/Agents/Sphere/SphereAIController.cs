@@ -18,21 +18,6 @@ public class SphereAIController : MonoBehaviour
         }
     }
 
-    [Serializable]
-    private class DestinationEventData
-    {
-        public string state;
-        public Vector3 position;
-        public string targetName;
-
-        public DestinationEventData(string state, Vector3 position, string targetName)
-        {
-            this.state = state;
-            this.position = position;
-            this.targetName = targetName;
-        }
-    }
-
     [Header("Agent Settings")]
     public string agentId = "sphere_1";
 
@@ -157,19 +142,6 @@ public class SphereAIController : MonoBehaviour
             {
                 targetName = "RandomPoint";
             }
-        }
-
-        if (networkServer != null)
-        {
-            string eventType = "destination_change";
-            string agentId = this.agentId;
-            string data = JsonUtility.ToJson(new DestinationEventData(
-                "destination_change",
-                movement.GetTargetPosition(),
-                targetName
-            ));
-            string message = $"{eventType}|{agentId}|{data}";
-            networkServer.SendUpdate(message);
         }
     }
 
