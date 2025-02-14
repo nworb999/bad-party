@@ -61,12 +61,15 @@ public class SphereMovement : MonoBehaviour
         {
             if (networkServer != null)
             {
-                string message = JsonUtility.ToJson(new PositionUpdateData(
+                string eventType = "position_update";
+                string agentId = aiController.agentId;
+                string data = JsonUtility.ToJson(new PositionUpdateData(
                     transform.position,
                     currentVelocity,
                     currentSpeed
                 ));
-                networkServer.SendUpdate($"position_update|{aiController.agentId}|{message}");
+                string message = $"{eventType}|{agentId}|{data}";
+                networkServer.SendUpdate(message);
             }
             lastUpdateTime = Time.time;
         }

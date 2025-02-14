@@ -161,13 +161,15 @@ public class SphereAIController : MonoBehaviour
 
         if (networkServer != null)
         {
-            var destinationEvent = new DestinationEventData(
-                "new_destination",
+            string eventType = "destination_change";
+            string agentId = this.agentId;
+            string data = JsonUtility.ToJson(new DestinationEventData(
+                "destination_change",
                 movement.GetTargetPosition(),
                 targetName
-            );
-            string message = JsonUtility.ToJson(destinationEvent);
-            networkServer.SendUpdate($"destination_change|{agentId}|{message}");
+            ));
+            string message = $"{eventType}|{agentId}|{data}";
+            networkServer.SendUpdate(message);
         }
     }
 
@@ -227,9 +229,11 @@ public class SphereAIController : MonoBehaviour
         // Send state change event to Python server
         if (networkServer != null)
         {
-            var stateEvent = new StateChangeData(newState.ToString(), transform.position);
-            string message = JsonUtility.ToJson(stateEvent);
-            networkServer.SendUpdate($"state_change|{agentId}|{message}");
+            string eventType = "state_change";
+            string agentId = this.agentId;
+            string data = JsonUtility.ToJson(new StateChangeData(newState.ToString(), transform.position));
+            string message = $"{eventType}|{agentId}|{data}";
+            networkServer.SendUpdate(message);
         }
     }
 }
