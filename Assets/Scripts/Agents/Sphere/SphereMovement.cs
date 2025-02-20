@@ -33,7 +33,7 @@ public class SphereMovement : MonoBehaviour
     private Vector3 targetPosition;
     private float currentSpeed;
 
-    private NetworkServer networkServer;
+    private WebSocketManager webSocketManager;
     private float positionUpdateInterval = 0.1f; // Send position 10 times per second
     private float lastUpdateTime = 0f;
 
@@ -41,7 +41,7 @@ public class SphereMovement : MonoBehaviour
     {
         AdjustHeightToGround(transform.position);
         currentSpeed = 0f;
-        networkServer = GameObject.FindObjectOfType<NetworkServer>();
+        webSocketManager = GameObject.FindObjectOfType<WebSocketManager>();
         aiController = GetComponent<SphereAIController>();
     }
 
@@ -59,17 +59,13 @@ public class SphereMovement : MonoBehaviour
         // Send position updates if moving
         if (currentSpeed > 0.01f && Time.time - lastUpdateTime >= positionUpdateInterval)
         {
-            if (networkServer != null)
+            if (webSocketManager != null)
             {
-                string eventType = "position_update";
-                string agentId = aiController.agentId;
-                string data = JsonUtility.ToJson(new PositionUpdateData(
+                webSocketManager.SendStateUpdate(aiController.agentId, new PositionUpdateData(
                     transform.position,
                     currentVelocity,
                     currentSpeed
                 ));
-                string message = $"{eventType}|{agentId}|{data}";
-                networkServer.SendUpdate(message);
             }
             lastUpdateTime = Time.time;
         }

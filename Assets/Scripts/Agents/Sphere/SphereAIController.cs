@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using NativeWebSocket;
 
 [RequireComponent(typeof(SphereMovement))]
 public class SphereAIController : MonoBehaviour
@@ -43,7 +44,7 @@ public class SphereAIController : MonoBehaviour
     private float stateStartTime;
     private MovementState currentState;
 
-    private NetworkServer networkServer;
+    private WebSocketManager webSocketManager;
 
     private enum MovementState
     {
@@ -54,7 +55,7 @@ public class SphereAIController : MonoBehaviour
     private void Start()
     {
         movement = GetComponent<SphereMovement>();
-        networkServer = GameObject.FindObjectOfType<NetworkServer>();
+        webSocketManager = GameObject.FindObjectOfType<WebSocketManager>();
 
         if (movement == null)
         {
@@ -75,9 +76,9 @@ public class SphereAIController : MonoBehaviour
             centerObject = gameObject;
         }
 
-        if (networkServer == null)
+        if (webSocketManager == null)
         {
-            Debug.LogWarning("NetworkServer not found in scene!");
+            Debug.LogWarning("WebSocketManager not found in scene!");
         }
 
         stateStartTime = Time.time;
@@ -198,14 +199,12 @@ public class SphereAIController : MonoBehaviour
             movement.StopMovement();
         }
 
-        // Send state change event to Python server
-        if (networkServer != null)
+        if (webSocketManager != null)
         {
-            string eventType = "state_change";
-            string agentId = this.agentId;
-            string data = JsonUtility.ToJson(new StateChangeData(newState.ToString(), transform.position));
-            string message = $"{eventType}|{agentId}|{data}";
-            networkServer.SendUpdate(message);
+            webSocketManager.SendStateUpdate(agentId, new StateChangeData(
+                newState.ToString(), 
+                transform.position
+            ));
         }
     }
 }
