@@ -7,7 +7,7 @@ using NativeWebSocket;
 public class SphereAIController : MonoBehaviour
 {
     [Serializable]
-    private class StateChangeData
+    public class StateChangeData
     {
         public string state;
         public Vector3 position;

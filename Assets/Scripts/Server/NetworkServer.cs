@@ -6,7 +6,6 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using UnityEngine;
-using Cinemachine;
 
 public class NetworkServer : MonoBehaviour 
 {
@@ -24,7 +23,6 @@ public class NetworkServer : MonoBehaviour
     {
         public List<string> agent_ids;
         public List<string> locations;
-        public List<string> cameras;
     }
 
     private void Start()
@@ -158,7 +156,6 @@ public class NetworkServer : MonoBehaviour
         {
             // Safe to call FindObjectsOfType here since we're on the main thread
             SphereAIController[] agents = FindObjectsOfType<SphereAIController>();
-            CinemachineVirtualCamera[] cameras = FindObjectsOfType<CinemachineVirtualCamera>();
 
             // Create a new instance of our serializable class
             SetupData setupData = new SetupData
@@ -169,10 +166,6 @@ public class NetworkServer : MonoBehaviour
                     .Where(loc => loc != null)
                     .Select(loc => loc.name)
                     .Distinct()
-                    .ToList(),
-                cameras = cameras
-                    .Where(cam => cam != null)
-                    .Select(cam => cam.Name)
                     .ToList()
             };
 

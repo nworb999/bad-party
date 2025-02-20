@@ -1,202 +1,135 @@
+using System;
 using UnityEngine;
 using NativeWebSocket;
-using System.Threading.Tasks;
-using System;
+using System.Linq;
+using System.Collections.Generic;
+using Cinemachine;
 
-public class WebSocketManager : MonoBehaviour 
+public class WebSocketManager : MonoBehaviour
 {
-    [SerializeField]
-    private string serverUrl = "ws://localhost:8000/ws/py_client";
-    
-    private WebSocket websocket;
-    private bool isConnecting = false;
-    private float reconnectDelay = 5f;
-    private float reconnectTimer = 0f;
-    private string clientId;
+    WebSocket websocket;
 
     [System.Serializable]
-    private class ConnectMessageData
+    public class SetupMessage
     {
-        public string message = "Unity client connection request";
+        public string messageType;
+        public string sender;
+        public SetupData data;
     }
 
     [System.Serializable]
-    private class ConnectMessage
+    public class SetupData
     {
-        public string @event = "connect";
-        public ConnectMessageData data;
-    }
-
-    // Added back state update classes
-    [System.Serializable]
-    private class WebSocketMessageData
-    {
-        public string status;
-        public string client_id;
+        public List<string> agent_ids;
+        public List<string> locations;
+        public List<string> cameras;
     }
 
     [System.Serializable]
-    private class WebSocketMessage
+    public class StateUpdateMessage
     {
-        public string @event;
-        public WebSocketMessageData data;
-    }
-
-    [System.Serializable]
-    private class StateUpdateData
-    {
+        public string messageType;
+        public string sender;
         public string agent_id;
-        public string state;
+        public object data;
     }
 
-    [System.Serializable]
-    private class StateUpdateMessage
+    async void Start()
     {
-        public string @event = "state_update";
-        public string client_id;
-        public StateUpdateData data;
-    }
+        websocket = new WebSocket("ws://localhost:3000/ws");
 
-    private async void Start()
-    {
-        Debug.Log("WebSocketManager starting...");
-        await ConnectToServer();
-    }
-
-    private async Task ConnectToServer()
-    {
-        if (isConnecting)
+        websocket.OnOpen += () => 
         {
-            Debug.Log("Already attempting to connect...");
-            return;
-        }
+            Debug.Log("Connection open!");
+            SendSetupData();
+        };
+        websocket.OnError += (e) => Debug.LogError("Error: " + e);
+        websocket.OnClose += (e) => Debug.Log("Connection closed!");
         
-        isConnecting = true;
-        Debug.Log($"Attempting to connect to: {serverUrl}");
-
-        try
+        websocket.OnMessage += (bytes) =>
         {
-            Debug.Log($"Attempting to connect to {serverUrl}");
-            websocket = new WebSocket(serverUrl);
+            // Convert byte array to string
+            var message = System.Text.Encoding.UTF8.GetString(bytes);
+            Debug.Log("Received: " + message);
+        };
 
-            websocket.OnOpen += () =>
-            {
-                Debug.Log("Connection established!");
-                SendConnectMessage();
-            };
-
-            websocket.OnError += (e) =>
-            {
-                Debug.LogError($"WebSocket error: {e}");
-                Debug.LogError($"WebSocket state: {websocket.State}");
-            };
-
-            websocket.OnClose += (code) =>
-            {
-                Debug.Log($"Connection closed with code: {code}");
-                Debug.Log($"WebSocket state at close: {websocket.State}");
-                isConnecting = false;
-                reconnectTimer = reconnectDelay;
-            };
-
-            websocket.OnMessage += (bytes) =>
-            {
-                var message = System.Text.Encoding.UTF8.GetString(bytes);
-                Debug.Log($"Received message: {message}");
-                HandleServerMessage(message);
-            };
-
-            Debug.Log("Initiating WebSocket connection...");
-            await websocket.Connect();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Exception during connection attempt: {e}");
-            Debug.LogError($"Stack trace: {e.StackTrace}");
-            isConnecting = false;
-            reconnectTimer = reconnectDelay;
-        }
+        await websocket.Connect();
     }
 
-    private void HandleServerMessage(string message)
+    void Update()
     {
-        try
-        {
-            var data = JsonUtility.FromJson<WebSocketMessage>(message);
-            if (data.@event == "connect" && data.data.status == "granted")
-            {
-                clientId = data.data.client_id;
-                Debug.Log($"Connected with client ID: {clientId}");
-            }
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error handling message: {e}");
-        }
+        #if !UNITY_WEBGL || UNITY_EDITOR
+        websocket.DispatchMessageQueue();
+        #endif
     }
 
-    public void SendStateUpdate(string agentId, object state)
+    public new async void SendMessage(string message)
     {
-        if (websocket?.State == WebSocketState.Open && !string.IsNullOrEmpty(clientId))
+        if (websocket.State == WebSocketState.Open)
         {
-            var stateData = new StateUpdateData
-            {
-                agent_id = agentId,
-                state = JsonUtility.ToJson(state)
-            };
-
-            var stateMessage = new StateUpdateMessage
-            {
-                client_id = clientId,
-                data = stateData
-            };
-
-            string json = JsonUtility.ToJson(stateMessage);
-            websocket.SendText(json);
+            await websocket.SendText(message);
         }
-    }
-
-    private void SendConnectMessage()
-    {
-        try
-        {
-            var messageData = new ConnectMessageData { message = "Unity client connection request" };
-            var connectMessage = new ConnectMessage { data = messageData };
-            string json = JsonUtility.ToJson(connectMessage);
-            Debug.Log($"Sending connect message: {json}");
-            websocket.SendText(json);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogError($"Error sending connect message: {e}");
-        }
-    }
-
-    private void Update()
-    {
-        if (websocket == null || websocket.State == WebSocketState.Closed)
-        {
-            reconnectTimer -= Time.deltaTime;
-            if (reconnectTimer <= 0)
-            {
-                _ = ConnectToServer();
-            }
-        }
-
-#if !UNITY_WEBGL || UNITY_EDITOR
-        if (websocket != null)
-        {
-            websocket.DispatchMessageQueue();
-        }
-#endif
     }
 
     private async void OnApplicationQuit()
     {
-        if (websocket != null && websocket.State == WebSocketState.Open)
+        await websocket.Close();
+    }
+
+    private void SendSetupData()
+    {
+        try
         {
-            Debug.Log("Closing WebSocket connection...");
-            await websocket.Close();
+            SphereAIController[] agents = FindObjectsOfType<SphereAIController>();
+            CinemachineVirtualCamera[] cameras = FindObjectsOfType<CinemachineVirtualCamera>();
+
+            SetupMessage message = new SetupMessage
+            {
+                messageType = "setup",
+                sender = "server",
+                data = new SetupData
+                {
+                    agent_ids = agents.Select(agent => agent.agentId).ToList(),
+                    locations = agents
+                        .SelectMany(agent => agent.locationObjects ?? new GameObject[0])
+                        .Where(loc => loc != null)
+                        .Select(loc => loc.name)
+                        .Distinct()
+                        .ToList(),
+                    cameras = cameras
+                        .Where(cam => cam != null)
+                        .Select(cam => cam.Name)
+                        .ToList()
+                }
+            };
+
+            string jsonMessage = JsonUtility.ToJson(message);
+            SendMessage(jsonMessage);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error sending setup data: {e.Message}");
         }
     }
-} 
+
+    public void SendStateUpdate(string agentId, object data)
+    {
+        try
+        {
+            StateUpdateMessage message = new StateUpdateMessage
+            {
+                messageType = "state_update",
+                sender = "server",
+                agent_id = agentId,
+                data = data
+            };
+
+            string jsonMessage = JsonUtility.ToJson(message);
+            SendMessage(jsonMessage);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error sending state update: {e.Message}");
+        }
+    }
+}
