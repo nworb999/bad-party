@@ -1,24 +1,12 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using NativeWebSocket;
 
 [RequireComponent(typeof(SphereMovement))]
 public class SphereAIController : MonoBehaviour
 {
-    [Serializable]
-    public class StateChangeData
-    {
-        public string state;
-        public Vector3 position;
-
-        public StateChangeData(string state, Vector3 position)
-        {
-            this.state = state;
-            this.position = position;
-        }
-    }
-
     [Header("Agent Settings")]
     public string agentId = "sphere_1";
 
@@ -32,10 +20,12 @@ public class SphereAIController : MonoBehaviour
     public LayerMask obstacleLayer; // Layer mask for obstacles
     public float bufferDistance = 0.5f;
 
-    private float minWalkTime = 3f;
-    private float maxWalkTime = 5f;
-    private float minStandTime = 0.5f;
-    private float maxStandTime = 1.5f;
+    [Header("Proximity Settings")]
+    public float itemProximityDistance = 2f;
+    public float locationProximityDistance = 3f;
+    public float characterProximityDistance = 4f;
+    public float checkInterval = 0.5f;
+
     private float lookAroundWaitTime = 0.5f;
     public int currentPointIndex = 0; // Index of current location point
     private bool isWaiting = false;
@@ -45,6 +35,10 @@ public class SphereAIController : MonoBehaviour
     private MovementState currentState;
 
     private WebSocketManager webSocketManager;
+
+    private HashSet<string> nearbyItems = new HashSet<string>();
+    private HashSet<string> nearbyLocations = new HashSet<string>();
+    private HashSet<string> nearbyAgents = new HashSet<string>();
 
     private enum MovementState
     {
@@ -84,7 +78,7 @@ public class SphereAIController : MonoBehaviour
         stateStartTime = Time.time;
         currentState = MovementState.Walking; // Start with walking state
         SetNewDestination(); // Set initial destination immediately
-        StartCoroutine(MovementLoop());
+        StartCoroutine(ProximityCheckLoop());
     }
 
     private void Update()
@@ -122,26 +116,22 @@ public class SphereAIController : MonoBehaviour
 
     private void SetNewDestination()
     {
-        string targetName;
+        string targetName = "RandomPoint";
         if (locationObjects.Length > 1)
         {
-            // Move to next point in sequence
             currentPointIndex = (currentPointIndex + 1) % locationObjects.Length;
-            movement.MoveToObject(locationObjects[currentPointIndex]);
-            targetName = locationObjects[currentPointIndex].name;
+            var targetLocation = locationObjects[currentPointIndex];
+            movement.MoveToObject(targetLocation);
+            targetName = targetLocation.name;
+            
+            // Send location reached event when destination is set to a named location
+            webSocketManager?.SendLocationReached(agentId, targetName, targetLocation.transform.position);
         }
         else
         {
-            // Try random movement
             if (!movement.TryMoveToRandomPoint(centerObject.transform.position, moveRadius, locationObjects))
             {
-                // If no valid position found, stay in place
                 movement.SetTargetPosition(transform.position);
-                targetName = "None";
-            }
-            else
-            {
-                targetName = "RandomPoint";
             }
         }
     }
@@ -169,24 +159,73 @@ public class SphereAIController : MonoBehaviour
         SetNewDestination();
     }
 
-    private IEnumerator MovementLoop()
+    private IEnumerator ProximityCheckLoop()
     {
         while (true)
         {
-            // Shorter waits between state changes
-            if (currentState == MovementState.Walking)
+            CheckItemProximity();
+            CheckLocationProximity();
+            CheckAgentProximity();
+            yield return new WaitForSeconds(checkInterval);
+        }
+    }
+
+    private void CheckItemProximity()
+    {
+        Collider[] hitColliders = Physics.OverlapSphere(transform.position, itemProximityDistance);
+        foreach (var hitCollider in hitColliders)
+        {
+            if (hitCollider.CompareTag("Item") && !nearbyItems.Contains(hitCollider.name))
             {
-                yield return new WaitForSeconds(UnityEngine.Random.Range(minWalkTime, maxWalkTime));
-                ChangeState(MovementState.Standing);
-            }
-            else
-            {
-                yield return new WaitForSeconds(
-                    UnityEngine.Random.Range(minStandTime, maxStandTime)
-                ); // Shorter standing time
-                ChangeState(MovementState.Walking);
+                nearbyItems.Add(hitCollider.name);
+                webSocketManager?.SendProximityEvent(agentId, "item_near", hitCollider.name, transform.position);
             }
         }
+        
+        // Check for exited items
+        nearbyItems.RemoveWhere(itemId => 
+            !Array.Exists(hitColliders, c => c.name == itemId));
+    }
+
+    private void CheckLocationProximity()
+    {
+        foreach (var location in locationObjects)
+        {
+            if (location == null) continue;
+            
+            float distance = Vector3.Distance(transform.position, location.transform.position);
+            bool isNear = distance <= locationProximityDistance;
+            
+            if (isNear && !nearbyLocations.Contains(location.name))
+            {
+                nearbyLocations.Add(location.name);
+                webSocketManager?.SendProximityEvent(agentId, "location_near", location.name, transform.position);
+            }
+            else if (!isNear && nearbyLocations.Contains(location.name))
+            {
+                nearbyLocations.Remove(location.name);
+            }
+        }
+    }
+
+    private void CheckAgentProximity()
+    {
+        Collider[] hitColliders = Physics.OverlapSphere(transform.position, characterProximityDistance);
+        foreach (var hitCollider in hitColliders)
+        {
+            if (hitCollider.TryGetComponent<SphereAIController>(out var otherAgent) && 
+                otherAgent.agentId != agentId &&
+                !nearbyAgents.Contains(otherAgent.agentId))
+            {
+                nearbyAgents.Add(otherAgent.agentId);
+                webSocketManager?.SendProximityEvent(agentId, "character_near", otherAgent.agentId, transform.position);
+            }
+        }
+        
+        // Check for exited agents
+        nearbyAgents.RemoveWhere(agentId => 
+            !Array.Exists(hitColliders, c => 
+                c.TryGetComponent<SphereAIController>(out var a) && a.agentId == agentId));
     }
 
     private void ChangeState(MovementState newState)
@@ -197,14 +236,6 @@ public class SphereAIController : MonoBehaviour
         if (newState == MovementState.Standing)
         {
             movement.StopMovement();
-        }
-
-        if (webSocketManager != null)
-        {
-            webSocketManager.SendStateUpdate(agentId, new StateChangeData(
-                newState.ToString(), 
-                transform.position
-            ));
         }
     }
 }

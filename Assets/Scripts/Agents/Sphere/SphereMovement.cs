@@ -3,21 +3,6 @@ using UnityEngine;
 
 public class SphereMovement : MonoBehaviour
 {
-    [Serializable]
-    private class PositionUpdateData
-    {
-        public Vector3 position;
-        public Vector3 velocity;
-        public float speed;
-
-        public PositionUpdateData(Vector3 pos, Vector3 vel, float spd)
-        {
-            position = pos;
-            velocity = vel;
-            speed = spd;
-        }
-    }
-
     private SphereAIController aiController;
 
     [Header("Movement Settings")]
@@ -34,8 +19,6 @@ public class SphereMovement : MonoBehaviour
     private float currentSpeed;
 
     private WebSocketManager webSocketManager;
-    private float positionUpdateInterval = 0.1f; // Send position 10 times per second
-    private float lastUpdateTime = 0f;
 
     private void Start()
     {
@@ -51,26 +34,10 @@ public class SphereMovement : MonoBehaviour
         Vector3 moveDirection = (adjustedTarget - transform.position);
         float distanceToTarget = moveDirection.magnitude;
 
-        // Gradually adjust speed based on distance to target
         float targetSpeed = distanceToTarget > 1f ? moveSpeed : moveSpeed * (distanceToTarget / 1f);
         float dummy = 0f;
         currentSpeed = Mathf.SmoothDamp(currentSpeed, targetSpeed, ref dummy, smoothTime);
 
-        // Send position updates if moving
-        if (currentSpeed > 0.01f && Time.time - lastUpdateTime >= positionUpdateInterval)
-        {
-            if (webSocketManager != null)
-            {
-                webSocketManager.SendStateUpdate(aiController.agentId, new PositionUpdateData(
-                    transform.position,
-                    currentVelocity,
-                    currentSpeed
-                ));
-            }
-            lastUpdateTime = Time.time;
-        }
-
-        // Apply smooth movement
         Vector3 newPosition = Vector3.SmoothDamp(
             transform.position,
             adjustedTarget,
@@ -78,10 +45,8 @@ public class SphereMovement : MonoBehaviour
             smoothTime
         );
 
-        // Apply position with maintained ground height
         transform.position = AdjustHeightToGround(newPosition);
 
-        // Smooth rotation towards movement direction
         if (moveDirection.magnitude > 0.1f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(moveDirection);

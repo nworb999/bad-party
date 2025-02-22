@@ -26,12 +26,22 @@ public class WebSocketManager : MonoBehaviour
     }
 
     [System.Serializable]
-    public class StateUpdateMessage
+    public class LocationReachedMessage
     {
-        public string messageType;
-        public string sender;
+        public string messageType = "location_reached";
         public string agent_id;
-        public object data;
+        public string location_name;
+        public Vector3 position;
+    }
+
+    [System.Serializable]
+    public class ProximityEventMessage
+    {
+        public string messageType = "proximity_event";
+        public string agent_id;
+        public string event_type;
+        public string target_id;
+        public Vector3 position;
     }
 
     async void Start()
@@ -104,6 +114,9 @@ public class WebSocketManager : MonoBehaviour
             };
 
             string jsonMessage = JsonUtility.ToJson(message);
+            Debug.Log($"Sent setup data: {message.data.agent_ids.Count} agents, " +
+                    $"{message.data.locations.Count} locations, " +
+                    $"{message.data.cameras.Count} cameras");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
@@ -112,24 +125,48 @@ public class WebSocketManager : MonoBehaviour
         }
     }
 
-    public void SendStateUpdate(string agentId, object data)
+    public void SendLocationReached(string agentId, string locationName, Vector3 position)
     {
         try
         {
-            StateUpdateMessage message = new StateUpdateMessage
+            LocationReachedMessage message = new LocationReachedMessage
             {
-                messageType = "state_update",
-                sender = "server",
                 agent_id = agentId,
-                data = data
+                location_name = locationName,
+                position = position
             };
-
+            
             string jsonMessage = JsonUtility.ToJson(message);
+            Debug.Log($"Sent location reached event - Agent: {agentId}, " +
+                    $"Location: {locationName}, Position: {position}");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
         {
-            Debug.LogError($"Error sending state update: {e.Message}");
+            Debug.LogError($"Error sending location reached: {e.Message}");
+        }
+    }
+
+    public void SendProximityEvent(string agentId, string eventType, string targetId, Vector3 position)
+    {
+        try
+        {
+            ProximityEventMessage message = new ProximityEventMessage
+            {
+                agent_id = agentId,
+                event_type = eventType,
+                target_id = targetId,
+                position = position
+            };
+            
+            string jsonMessage = JsonUtility.ToJson(message);
+            Debug.Log($"Sent proximity event - Agent: {agentId}, Type: {eventType}, " +
+                    $"Target: {targetId}, Position: {position}");
+            SendMessage(jsonMessage);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error sending proximity event: {e.Message}");
         }
     }
 }
