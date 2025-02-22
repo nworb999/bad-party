@@ -178,11 +178,11 @@ public class SphereAIController : MonoBehaviour
             if (hitCollider.CompareTag("Item") && !nearbyItems.Contains(hitCollider.name))
             {
                 nearbyItems.Add(hitCollider.name);
-                webSocketManager?.SendProximityEvent(agentId, "item_near", hitCollider.name, transform.position);
+                float distance = Vector3.Distance(transform.position, hitCollider.transform.position);
+                webSocketManager?.SendProximityEvent(agentId, "item_near", hitCollider.name, distance);
             }
         }
         
-        // Check for exited items
         nearbyItems.RemoveWhere(itemId => 
             !Array.Exists(hitColliders, c => c.name == itemId));
     }
@@ -199,7 +199,7 @@ public class SphereAIController : MonoBehaviour
             if (isNear && !nearbyLocations.Contains(location.name))
             {
                 nearbyLocations.Add(location.name);
-                webSocketManager?.SendProximityEvent(agentId, "location_near", location.name, transform.position);
+                webSocketManager?.SendProximityEvent(agentId, "location_near", location.name, distance);
             }
             else if (!isNear && nearbyLocations.Contains(location.name))
             {
@@ -218,11 +218,11 @@ public class SphereAIController : MonoBehaviour
                 !nearbyAgents.Contains(otherAgent.agentId))
             {
                 nearbyAgents.Add(otherAgent.agentId);
-                webSocketManager?.SendProximityEvent(agentId, "character_near", otherAgent.agentId, transform.position);
+                float distance = Vector3.Distance(transform.position, otherAgent.transform.position);
+                webSocketManager?.SendProximityEvent(agentId, "character_near", otherAgent.agentId, distance);
             }
         }
         
-        // Check for exited agents
         nearbyAgents.RemoveWhere(agentId => 
             !Array.Exists(hitColliders, c => 
                 c.TryGetComponent<SphereAIController>(out var a) && a.agentId == agentId));

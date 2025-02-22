@@ -23,6 +23,7 @@ public class WebSocketManager : MonoBehaviour
         public List<string> agent_ids;
         public List<string> locations;
         public List<string> cameras;
+        public List<string> items = new List<string>();
     }
 
     [System.Serializable]
@@ -31,7 +32,7 @@ public class WebSocketManager : MonoBehaviour
         public string messageType = "location_reached";
         public string agent_id;
         public string location_name;
-        public Vector3 position;
+        public float[] coordinates;
     }
 
     [System.Serializable]
@@ -41,7 +42,7 @@ public class WebSocketManager : MonoBehaviour
         public string agent_id;
         public string event_type;
         public string target_id;
-        public Vector3 position;
+        public float distance;
     }
 
     async void Start()
@@ -109,7 +110,8 @@ public class WebSocketManager : MonoBehaviour
                     cameras = cameras
                         .Where(cam => cam != null)
                         .Select(cam => cam.Name)
-                        .ToList()
+                        .ToList(),
+                    items = new List<string>()
                 }
             };
 
@@ -133,12 +135,11 @@ public class WebSocketManager : MonoBehaviour
             {
                 agent_id = agentId,
                 location_name = locationName,
-                position = position
+                coordinates = new float[] { position.x, position.y, position.z }
             };
             
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent location reached event - Agent: {agentId}, " +
-                    $"Location: {locationName}, Position: {position}");
+            Debug.Log($"Sent location reached event - Agent: {agentId}, Location: {locationName}");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
@@ -147,7 +148,7 @@ public class WebSocketManager : MonoBehaviour
         }
     }
 
-    public void SendProximityEvent(string agentId, string eventType, string targetId, Vector3 position)
+    public void SendProximityEvent(string agentId, string eventType, string targetId, float distance)
     {
         try
         {
@@ -156,12 +157,11 @@ public class WebSocketManager : MonoBehaviour
                 agent_id = agentId,
                 event_type = eventType,
                 target_id = targetId,
-                position = position
+                distance = distance
             };
             
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent proximity event - Agent: {agentId}, Type: {eventType}, " +
-                    $"Target: {targetId}, Position: {position}");
+            Debug.Log($"Sent proximity event - Agent: {agentId}, Type: {eventType}, Target: {targetId}, Distance: {distance}");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
