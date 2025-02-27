@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using NativeWebSocket;
+using System.Linq;
 
 [RequireComponent(typeof(SphereMovement))]
 public class SphereAIController : MonoBehaviour
@@ -14,7 +15,6 @@ public class SphereAIController : MonoBehaviour
     public float moveRadius = 10f; // Maximum distance to move
     public float waitTime = 2f; // Time to wait between movements
     public GameObject centerObject; // Center object for movement radius
-    public GameObject[] locationObjects; // Array of GameObjects to move between
 
     [Header("Collision Settings")]
     public LayerMask obstacleLayer; // Layer mask for obstacles
@@ -35,6 +35,8 @@ public class SphereAIController : MonoBehaviour
     private MovementState currentState;
 
     private WebSocketManager webSocketManager;
+    private EnvironmentManager environmentManager;
+    private GameObject currentTargetLocation;
 
     private HashSet<string> nearbyItems = new HashSet<string>();
     private HashSet<string> nearbyLocations = new HashSet<string>();
@@ -49,7 +51,8 @@ public class SphereAIController : MonoBehaviour
     private void Start()
     {
         movement = GetComponent<SphereMovement>();
-        webSocketManager = GameObject.FindObjectOfType<WebSocketManager>();
+        webSocketManager = FindObjectOfType<WebSocketManager>();
+        environmentManager = FindObjectOfType<EnvironmentManager>();
 
         if (movement == null)
         {
@@ -58,10 +61,9 @@ public class SphereAIController : MonoBehaviour
             return;
         }
 
-        if (locationObjects == null || locationObjects.Length == 0)
+        if (environmentManager == null)
         {
-            Debug.LogWarning("No location objects set, falling back to random movement");
-            locationObjects = new GameObject[] { gameObject }; // Use self as fallback point
+            Debug.LogWarning("EnvironmentManager not found in scene!");
         }
 
         if (centerObject == null)
@@ -116,23 +118,25 @@ public class SphereAIController : MonoBehaviour
 
     private void SetNewDestination()
     {
-        string targetName = "RandomPoint";
-        if (locationObjects.Length > 1)
+        if (environmentManager != null && environmentManager.GetAllLocations().Count > 0)
         {
-            currentPointIndex = (currentPointIndex + 1) % locationObjects.Length;
-            var targetLocation = locationObjects[currentPointIndex];
-            movement.MoveToObject(targetLocation);
-            targetName = targetLocation.name;
-            
-            // Send location reached event when destination is set to a named location
-            webSocketManager?.SendLocationReached(agentId, targetName, targetLocation.transform.position);
-        }
-        else
-        {
-            if (!movement.TryMoveToRandomPoint(centerObject.transform.position, moveRadius, locationObjects))
+            // Get a random location from the environment manager
+            var locationInfo = environmentManager.GetRandomLocation();
+            if (locationInfo != null)
             {
-                movement.SetTargetPosition(transform.position);
+                currentTargetLocation = locationInfo.locationObject;
+                movement.MoveToObject(currentTargetLocation);
+                
+                // Send location reached event
+                webSocketManager?.SendLocationReached(agentId, locationInfo.locationName, currentTargetLocation.transform.position);
+                return;
             }
+        }
+        
+        // Fallback to random movement if no locations or environment manager
+        if (!movement.TryMoveToRandomPoint(centerObject.transform.position, moveRadius, null))
+        {
+            movement.SetTargetPosition(transform.position);
         }
     }
 
@@ -189,21 +193,23 @@ public class SphereAIController : MonoBehaviour
 
     private void CheckLocationProximity()
     {
-        foreach (var location in locationObjects)
+        if (environmentManager == null) return;
+        
+        foreach (var location in environmentManager.GetAllLocations())
         {
-            if (location == null) continue;
+            if (location.locationObject == null) continue;
             
-            float distance = Vector3.Distance(transform.position, location.transform.position);
+            float distance = Vector3.Distance(transform.position, location.locationObject.transform.position);
             bool isNear = distance <= locationProximityDistance;
             
-            if (isNear && !nearbyLocations.Contains(location.name))
+            if (isNear && !nearbyLocations.Contains(location.locationName))
             {
-                nearbyLocations.Add(location.name);
-                webSocketManager?.SendProximityEvent(agentId, "location_near", location.name, distance);
+                nearbyLocations.Add(location.locationName);
+                webSocketManager?.SendProximityEvent(agentId, "location_near", location.locationName, distance);
             }
-            else if (!isNear && nearbyLocations.Contains(location.name))
+            else if (!isNear && nearbyLocations.Contains(location.locationName))
             {
-                nearbyLocations.Remove(location.name);
+                nearbyLocations.Remove(location.locationName);
             }
         }
     }
@@ -236,6 +242,63 @@ public class SphereAIController : MonoBehaviour
         if (newState == MovementState.Standing)
         {
             movement.StopMovement();
+        }
+    }
+
+    public void MoveToNamedLocation(string locationName)
+    {
+        if (environmentManager == null)
+        {
+            Debug.LogWarning($"Agent {agentId}: EnvironmentManager not found");
+            return;
+        }
+        
+        GameObject targetLocation = environmentManager.GetLocationObject(locationName);
+        
+        if (targetLocation != null)
+        {
+            // Stop any waiting coroutine
+            isWaiting = false;
+            StopAllCoroutines();
+            StartCoroutine(ProximityCheckLoop()); // Restart the proximity check
+            
+            // Set the new destination
+            currentTargetLocation = targetLocation;
+            movement.MoveToObject(targetLocation);
+            ChangeState(MovementState.Walking);
+            
+            // Send location reached event
+            webSocketManager?.SendLocationReached(agentId, locationName, targetLocation.transform.position);
+            
+            Debug.Log($"Agent {agentId} moving to location: {locationName}");
+        }
+        else
+        {
+            // Try to find a partial match
+            var allLocations = environmentManager.GetAllLocations();
+            var partialMatch = allLocations.FirstOrDefault(loc => 
+                loc.locationName.Contains(locationName) || 
+                locationName.Contains(loc.locationName));
+                
+            if (partialMatch != null && partialMatch.locationObject != null)
+            {
+                // Same code as above for moving to a location
+                isWaiting = false;
+                StopAllCoroutines();
+                StartCoroutine(ProximityCheckLoop());
+                
+                currentTargetLocation = partialMatch.locationObject;
+                movement.MoveToObject(currentTargetLocation);
+                ChangeState(MovementState.Walking);
+                
+                webSocketManager?.SendLocationReached(agentId, partialMatch.locationName, currentTargetLocation.transform.position);
+                
+                Debug.Log($"Agent {agentId} moving to partially matched location: {partialMatch.locationName} (requested: {locationName})");
+            }
+            else
+            {
+                Debug.LogWarning($"Agent {agentId}: Location '{locationName}' not found and no partial matches");
+            }
         }
     }
 }

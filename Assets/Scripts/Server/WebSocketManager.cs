@@ -8,22 +8,23 @@ using Cinemachine;
 public class WebSocketManager : MonoBehaviour
 {
     WebSocket websocket;
+    private EnvironmentManager environmentManager;
 
     [System.Serializable]
     public class SetupMessage
     {
-        public string messageType;
-        public string sender;
-        public SetupData data;
+        public string messageType = "setup";
+        public List<string> agent_ids;
+        public List<AreaData> areas = new List<AreaData>();
+        public List<string> cameras;
+        public List<string> items = new List<string>();
     }
 
     [System.Serializable]
-    public class SetupData
+    public class AreaData
     {
-        public List<string> agent_ids;
-        public List<string> locations;
-        public List<string> cameras;
-        public List<string> items = new List<string>();
+        public string area_name;
+        public List<string> locations = new List<string>();
     }
 
     [System.Serializable]
@@ -45,8 +46,22 @@ public class WebSocketManager : MonoBehaviour
         public float distance;
     }
 
+    [System.Serializable]
+    public class MoveToLocationMessage
+    {
+        public string messageType;
+        public string agent_id;
+        public string location_name;
+    }
+
     async void Start()
     {
+        environmentManager = FindObjectOfType<EnvironmentManager>();
+        if (environmentManager == null)
+        {
+            Debug.LogWarning("EnvironmentManager not found in scene!");
+        }
+
         websocket = new WebSocket("ws://localhost:3000/ws");
 
         websocket.OnOpen += () => 
@@ -62,6 +77,30 @@ public class WebSocketManager : MonoBehaviour
             // Convert byte array to string
             var message = System.Text.Encoding.UTF8.GetString(bytes);
             Debug.Log("Received: " + message);
+            
+            // Check if it's a move command
+            if (message.Contains("\"messageType\":\"move_to_location\""))
+            {
+                try 
+                {
+                    MoveToLocationMessage moveMessage = JsonUtility.FromJson<MoveToLocationMessage>(message);
+                    SphereAIController agent = FindAgentById(moveMessage.agent_id);
+                    
+                    if (agent != null)
+                    {
+                        agent.MoveToNamedLocation(moveMessage.location_name);
+                        Debug.Log($"Instructed agent {moveMessage.agent_id} to move to {moveMessage.location_name}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Agent {moveMessage.agent_id} not found");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"Error processing move command: {e.Message}");
+                }
+            }
         };
 
         await websocket.Connect();
@@ -96,29 +135,32 @@ public class WebSocketManager : MonoBehaviour
 
             SetupMessage message = new SetupMessage
             {
-                messageType = "setup",
-                sender = "server",
-                data = new SetupData
-                {
-                    agent_ids = agents.Select(agent => agent.agentId).ToList(),
-                    locations = agents
-                        .SelectMany(agent => agent.locationObjects ?? new GameObject[0])
-                        .Where(loc => loc != null)
-                        .Select(loc => loc.name)
-                        .Distinct()
-                        .ToList(),
-                    cameras = cameras
-                        .Where(cam => cam != null)
-                        .Select(cam => cam.Name)
-                        .ToList(),
-                    items = new List<string>()
-                }
+                agent_ids = agents.Select(agent => agent.agentId).ToList(),
+                cameras = cameras
+                    .Where(cam => cam != null)
+                    .Select(cam => cam.Name)
+                    .ToList(),
+                items = new List<string>()
             };
 
+            // Get areas and locations from EnvironmentManager
+            if (environmentManager != null)
+            {
+                foreach (var area in environmentManager.GetAllAreas())
+                {
+                    AreaData areaData = new AreaData
+                    {
+                        area_name = area.areaName,
+                        locations = area.locations.Select(loc => loc.locationName).ToList()
+                    };
+                    message.areas.Add(areaData);
+                }
+            }
+
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent setup data: {message.data.agent_ids.Count} agents, " +
-                    $"{message.data.locations.Count} locations, " +
-                    $"{message.data.cameras.Count} cameras");
+            Debug.Log($"Sent setup data: {message.agent_ids.Count} agents, " +
+                    $"{message.areas.Count} areas, " +
+                    $"{message.cameras.Count} cameras");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
@@ -168,5 +210,11 @@ public class WebSocketManager : MonoBehaviour
         {
             Debug.LogError($"Error sending proximity event: {e.Message}");
         }
+    }
+
+    private SphereAIController FindAgentById(string agentId)
+    {
+        SphereAIController[] agents = FindObjectsOfType<SphereAIController>();
+        return agents.FirstOrDefault(agent => agent.agentId == agentId);
     }
 }
