@@ -115,9 +115,13 @@ public class WebSocketManager : MonoBehaviour
 
     public new async void SendMessage(string message)
     {
-        if (websocket.State == WebSocketState.Open)
+        if (websocket != null && websocket.State == WebSocketState.Open)
         {
             await websocket.SendText(message);
+        }
+        else
+        {
+            Debug.LogWarning("Cannot send message: WebSocket is null or not open");
         }
     }
 
