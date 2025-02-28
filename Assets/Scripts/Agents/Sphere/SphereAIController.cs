@@ -270,7 +270,6 @@ public class SphereAIController : MonoBehaviour
             // Send location reached event
             webSocketManager?.SendLocationReached(agentId, locationName, targetLocation.transform.position);
             
-            Debug.Log($"Agent {agentId} moving to location: {locationName}");
         }
         else
         {
@@ -292,8 +291,6 @@ public class SphereAIController : MonoBehaviour
                 ChangeState(MovementState.Walking);
                 
                 webSocketManager?.SendLocationReached(agentId, partialMatch.locationName, currentTargetLocation.transform.position);
-                
-                Debug.Log($"Agent {agentId} moving to partially matched location: {partialMatch.locationName} (requested: {locationName})");
             }
             else
             {

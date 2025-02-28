@@ -14,14 +14,31 @@ public class ObjectLogger : MonoBehaviour
     [SerializeField]
     private float fontSize = 12f;
 
+    [SerializeField]
+    private bool filterByAgentId = true; // Whether to filter logs by agent ID
+
     private Queue<string> myLogQueue = new Queue<string>();
     private Camera mainCamera;
+    private SphereAIController attachedAgent;
+    private string agentId;
 
     void Start()
     {
         mainCamera = Camera.main;
+        
+        // Get the attached agent reference
+        attachedAgent = GetComponent<SphereAIController>();
+        if (attachedAgent != null)
+        {
+            agentId = attachedAgent.agentId;
+        }
+        else
+        {
+            Debug.LogWarning("ObjectLogger: No SphereAIController attached. Will log all messages.");
+            filterByAgentId = false;
+        }
+        
         Application.logMessageReceived += HandleLog;
-
     }
 
     void OnDisable()
@@ -31,13 +48,31 @@ public class ObjectLogger : MonoBehaviour
 
     void HandleLog(string logString, string stackTrace, LogType type)
     {
+        // Only log messages that contain the agent's ID or if filtering is disabled
+        if (!filterByAgentId || ShouldShowLog(logString))
+        {
+            myLogQueue.Enqueue($"{logString}");
+            if (type == LogType.Exception)
+                myLogQueue.Enqueue($"[{stackTrace}");
 
-        myLogQueue.Enqueue($"{logString}");
-        if (type == LogType.Exception)
-            myLogQueue.Enqueue($"[{stackTrace}");
+            while (myLogQueue.Count > qsize)
+                myLogQueue.Dequeue();
+        }
+    }
 
-        while (myLogQueue.Count > qsize)
-            myLogQueue.Dequeue();
+    // Determine if a log message should be shown for this agent
+    private bool ShouldShowLog(string logString)
+    {
+        // Filter out WebSocket received messages
+        if (logString.StartsWith("Received:"))
+            return false;
+            
+        if (agentId == null) return true;
+        
+        // Direct mentions of agent ID
+        if (logString.Contains(agentId)) return true;
+        
+        return false;
     }
 
     void OnGUI()
@@ -55,7 +90,9 @@ public class ObjectLogger : MonoBehaviour
 
         GUILayout.BeginArea(new Rect(screenPos.x - 250, y, 500, Screen.height));
         GUILayout.Label(
-            "\n" + string.Join("\n", myLogQueue.ToArray()),
+            // Add agent ID as title if we have one
+            (agentId != null ? $"Agent: {agentId}\n" : "") + 
+            string.Join("\n", myLogQueue.ToArray()),
             new GUIStyle()
             {
                 fontSize = (int)fontSize,

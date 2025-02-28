@@ -162,9 +162,6 @@ public class WebSocketManager : MonoBehaviour
             }
 
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent setup data: {message.agent_ids.Count} agents, " +
-                    $"{message.areas.Count} areas, " +
-                    $"{message.cameras.Count} cameras");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
@@ -185,7 +182,6 @@ public class WebSocketManager : MonoBehaviour
             };
             
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent location reached event - Agent: {agentId}, Location: {locationName}");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
@@ -207,7 +203,6 @@ public class WebSocketManager : MonoBehaviour
             };
             
             string jsonMessage = JsonUtility.ToJson(message);
-            Debug.Log($"Sent proximity event - Agent: {agentId}, Type: {eventType}, Target: {targetId}, Distance: {distance}");
             SendMessage(jsonMessage);
         }
         catch (Exception e)
