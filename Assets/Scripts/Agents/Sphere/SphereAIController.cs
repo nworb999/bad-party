@@ -298,4 +298,49 @@ public class SphereAIController : MonoBehaviour
             }
         }
     }
+
+    // Make agents wait at their current location for a specified duration
+    public void WaitAtCurrentLocation(float duration)
+    {
+        // Stop any existing coroutines
+        isWaiting = false;
+        StopAllCoroutines();
+        
+        // Start the wait coroutine with the specified duration
+        StartCoroutine(WaitForDuration(duration));
+        StartCoroutine(ProximityCheckLoop()); // Restart the proximity check
+    }
+
+    private IEnumerator WaitForDuration(float duration)
+    {
+        isWaiting = true;
+        ChangeState(MovementState.Standing);
+        
+        // Look around occasionally while waiting
+        float waitStart = Time.time;
+        while (Time.time - waitStart < duration)
+        {
+            if (UnityEngine.Random.value < 0.3f)
+            {
+                Vector3 randomLook = transform.position + UnityEngine.Random.insideUnitSphere * 5f;
+                randomLook.y = transform.position.y;
+                transform.LookAt(randomLook);
+            }
+            yield return new WaitForSeconds(lookAroundWaitTime);
+        }
+        
+        isWaiting = false;
+        ChangeState(MovementState.Walking);
+        SetNewDestination();
+    }
+
+    // Display dialogue from the agent without a specific listener
+    public void Speak(string dialogue)
+    {
+        // Log with DIALOGUE format for parsing
+        Debug.Log($"{agentId} DIALOGUE: {dialogue}");
+        
+        // Optional: You could add additional visualization here
+        // like speech bubbles or UI elements
+    }
 }

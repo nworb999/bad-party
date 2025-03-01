@@ -63,9 +63,16 @@ public class ObjectLogger : MonoBehaviour
     // Determine if a log message should be shown for this agent
     private bool ShouldShowLog(string logString)
     {
-        // Filter out WebSocket received messages
+        // Filter out regular WebSocket received messages
         if (logString.StartsWith("Received:"))
             return false;
+            
+        // Special handling for conversation messages
+        if (logString.StartsWith("CONVERSATION:"))
+        {
+            // If this agent is either the speaker or listener, show the message
+            return logString.Contains($"{agentId} →") || logString.Contains($"→ {agentId}:");
+        }
             
         if (agentId == null) return true;
         
